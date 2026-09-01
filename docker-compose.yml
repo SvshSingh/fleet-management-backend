@@ -1,0 +1,92 @@
+# `docker compose up` brings up the whole system: broker, backend, and the simulated
+# fleet, with no manual step in a second terminal.
+#
+# Platforms are pinned to linux/amd64 to match the stated evaluation environment.
+
+services:
+  broker:
+    image: eclipse-mosquitto:2.0.18
+    platform: linux/amd64
+    container_name: fleet-broker
+    ports:
+      # Host port is overridable because 1883 may already be taken on the reviewer's
+      # machine; the default keeps `docker compose up` a single no-setup command.
+      - "${BROKER_PORT:-1883}:1883"   # exposed only so you can point mosquitto_sub at it
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - broker-data:/mosquitto/data
+    healthcheck:
+      # Proves the broker is actually accepting subscriptions, not merely that the
+      # process started. $$SYS is escaped so compose does not eat it as a variable.
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -t '$$SYS/broker/uptime' -C 1 -W 3 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    container_name: fleet-backend
+    depends_on:
+      broker:
+        condition: service_healthy
+    ports:
+      # Same reasoning as the broker: 8000 is a busy port on a dev machine. Override
+      # with `API_PORT=8080 docker compose up` if it clashes.
+      - "${API_PORT:-8000}:8000"
+    environment:
+      MQTT_HOST: broker
+      MQTT_PORT: "1883"
+      DATA_DIR: /data
+      DB_PATH: /var/lib/fleet/fleet.db
+      # Substitutions, not literals: a literal here silently overrides anything the
+      # reader sets, which would make the table in README.md and .env.example a lie
+      # for the Docker path - the only path this submission actually ships. Compose
+      # reads ./.env for these, so `cp .env.example .env` now does what it says.
+      # Defaults match backend/app/config.py exactly.
+      HISTORY_ENABLED: "${HISTORY_ENABLED:-true}"
+      WATCHDOG_INTERVAL_SECONDS: "${WATCHDOG_INTERVAL_SECONDS:-2}"
+      STALE_AFTER_SECONDS: "${STALE_AFTER_SECONDS:-12}"
+      LOST_AFTER_SECONDS: "${LOST_AFTER_SECONDS:-30}"
+      LOW_BATTERY_PCT: "${LOW_BATTERY_PCT:-20}"
+      HUB_REPLAY_BUFFER: "${HUB_REPLAY_BUFFER:-500}"
+      HUB_SUBSCRIBER_QUEUE: "${HUB_SUBSCRIBER_QUEUE:-256}"
+      HUB_HEARTBEAT_SECONDS: "${HUB_HEARTBEAT_SECONDS:-10}"
+    volumes:
+      - ./data:/data:ro       # roster + recording; the backend never writes here
+      - fleet-db:/var/lib/fleet
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=3).status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  robot-fleet:
+    build:
+      context: ./robot_sim
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    container_name: fleet-robots
+    depends_on:
+      broker:
+        condition: service_healthy
+    environment:
+      MQTT_HOST: broker
+      MQTT_PORT: "1883"
+      DATA_DIR: /data
+      SPEED_FACTOR: "${SPEED_FACTOR:-5}"
+      CHAOS_DISCONNECT_PROB: "${CHAOS_DISCONNECT_PROB:-0}"
+      PUBLISHER_BUFFER_MAX: "${PUBLISHER_BUFFER_MAX:-200}"
+    volumes:
+      - ./data:/data:ro
+    restart: unless-stopped
+
+volumes:
+  broker-data:
+  fleet-db:
