@@ -1,6 +1,6 @@
-# Fleet Management Backend: Peppermint Robotics Hiring Challenge
+# Fleet Management Backend: Peppermint Robotics
 
-Assignment 2 (Backend). Eight simulated robots publish telemetry over MQTT; a FastAPI
+Eight simulated robots publish telemetry over MQTT; a FastAPI
 service ingests it, holds one authoritative fleet state, and serves that state over
 both a WebSocket stream and a REST endpoint that are guaranteed to agree.
 
@@ -281,8 +281,7 @@ docker compose exec robot-fleet sh -c 'for p in /proc/[0-9]*; do pid=${p##*/}; [
 
 ## AI delegation notes
 
-The brief asks for this, and asks for honesty rather than a small number. AI assistance
-(Claude) was used substantially, across two kinds of work: writing the thing, and then
+AI assistance was used substantially, across two kinds of work: writing the thing, and then
 trying to break it.
 
 **Delegated: writing.** Initial scaffolding of all modules, both Dockerfiles and the
