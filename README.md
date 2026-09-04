@@ -1,4 +1,4 @@
-# Fleet Management Backend — Peppermint Robotics Hiring Challenge
+# Fleet Management Backend: Peppermint Robotics Hiring Challenge
 
 Assignment 2 (Backend). Eight simulated robots publish telemetry over MQTT; a FastAPI
 service ingests it, holds one authoritative fleet state, and serves that state over
@@ -28,7 +28,7 @@ docker compose up --build
 ```
 
 That is the whole submission. It starts the broker, the backend, and the eight-robot
-simulation — no second terminal, no manual step.
+simulation: no second terminal, no manual step.
 
 Then:
 
@@ -41,9 +41,9 @@ python tools/ws_client.py            # watch the live stream
 python tools/ws_client.py --verify   # prove WS and REST agree, frame by frame
 ```
 
-The recorded 15-minute window replays at 5× by default, so the fleet is visibly moving
+The recorded 15-minute window replays at 5x by default, so the fleet is visibly moving
 within seconds. `SPEED_FACTOR=1 docker compose up` for real time. Publishers loop the
-recording with an incrementing `cycle` so the demo never goes dead — that is looping,
+recording with an incrementing `cycle` so the demo never goes dead. That is looping,
 not fifteen minutes of invented data.
 
 ### Tests
@@ -69,7 +69,7 @@ answers it:
 | Finding | Evidence |
 |---|---|
 | Battery rises **iff** `charging` | 73 of 73 increases are `charging`; no `charging` sample fails to rise |
-| Robots move **only** when `active` or `on_mission` | all 307 samples with movement; every other status is stationary |
+| Robots move **only** when `active` or `on_mission` | all 308 samples with movement; every other status is stationary |
 | **`offline` robots never move but keep publishing** | 85 `offline` samples, none with movement, all still arriving |
 | Cadence is exactly 5s | all 1,440 inter-sample gaps; so any gap the backend sees is a real fault, not jitter |
 
@@ -77,8 +77,8 @@ The third one drives the whole state model, and it is the decision I would most 
 to defend. `status` is what a robot says about itself; `link` is whether we can hear
 it. They are orthogonal, so both are stored (`models.py`):
 
-* `status=offline, link=live` — parked and reachable. Fine. No action.
-* `status=on_mission, link=lost` — mid-task and silent. Send someone now.
+* `status=offline, link=live`: parked and reachable. Fine. No action.
+* `status=on_mission, link=lost`: mid-task and silent. Send someone now.
 
 Collapsing those into one enum would throw away the distinction that matters most to
 an operator. `derive_attention()` in `models.py` is the single place that turns the
@@ -94,18 +94,18 @@ address. Note it excludes `charging` from the low-battery rule: a robot on its d
 
 Peppermint's robots ship worldwide with a Qualcomm telematics board on a cellular
 link, sitting inside a customer's building behind their NAT and firewall. That is the
-network this has to work on, and MQTT is built for it — it is what AWS IoT Core, Azure
+network this has to work on, and MQTT is built for it: it is what AWS IoT Core, Azure
 IoT Hub and Qualcomm's own telematics stacks speak. Concretely it gives:
 
-* **Last Will and Testament** — the broker announces a robot's death on its behalf
+* **Last Will and Testament**: the broker announces a robot's death on its behalf
   when the socket breaks. `robot_publisher.py` registers it at connect;
   `FleetState.apply_link` consumes it.
-* **Keepalive** — dead-peer detection in ~15s. Raw TCP will happily hold a half-open
+* **Keepalive**: dead-peer detection in ~15s. Raw TCP will happily hold a half-open
   socket that looks healthy for a very long time.
-* **QoS 1 + `clean_session=False` + retained messages** — the broker queues telemetry
+* **QoS 1 + `clean_session=False` + retained messages**: the broker queues telemetry
   while the backend restarts, and a fresh backend gets every robot's last known
   position immediately instead of a blank board.
-* **Wildcard subscribe** — `fleet/robots/+/telemetry` scales from 8 robots to 500 with
+* **Wildcard subscribe**: `fleet/robots/+/telemetry` scales from 8 robots to 500 with
   no code change.
 
 The cost is real and I own it: QoS 1 is *at-least-once*, so duplicates and reordering
@@ -122,7 +122,7 @@ my code rather than the broker's magic.
 ### The ingest guards (`ingest.py`)
 
 Every message is judged before it can touch state. Each rejection is counted and
-exposed at `/metrics` — silent loss is the failure mode this whole design exists to
+exposed at `/metrics`: silent loss is the failure mode this whole design exists to
 avoid.
 
 | Case | Action | Why |
@@ -145,7 +145,7 @@ async with self._lock:
     return snap, registered
 ```
 
-Take the snapshot, release the lock, then subscribe — the obvious two-step version —
+Take the snapshot, release the lock, then subscribe (the obvious two-step version),
 and any update landing in that window belongs to neither the snapshot nor the queue.
 It vanishes, silently, only under load. Doing both under one acquisition means a
 subscriber provably receives versions N+1, N+2, … with no gap and nothing twice, so
@@ -163,15 +163,15 @@ The brief asks for a design that assumes the network is bad. Specifically:
 
 | Failure | Response | Where |
 |---|---|---|
-| Robot's connection drops | broker fires LWT → `link=lost` in ~1s | `robot_publisher.py` will_set, `FleetState.apply_link` |
-| Robot connected but frozen | watchdog ages `live → stale → lost` on time since last message — the only thing that catches this, since the broker sees a healthy socket | `watchdog.py`, `FleetState.sweep_liveness` |
+| Robot's connection drops | broker fires LWT, `link=lost` in ~1s | `robot_publisher.py` will_set, `FleetState.apply_link` |
+| Robot connected but frozen | watchdog ages `live -> stale -> lost` on time since last message (the only thing that catches this, since the broker sees a healthy socket) | `watchdog.py`, `FleetState.sweep_liveness` |
 | Robot offline briefly | bounded `deque` buffers telemetry and flushes on reconnect; overflow drops oldest **and counts it** | `RobotPublisher._emit` |
-| Broker restarts | both sides reconnect with exponential backoff **and jitter** (500 robots reconnecting in lockstep is a self-inflicted DDoS) | `Ingestor.run`, `_connect_with_backoff` |
+| Broker restarts | both sides reconnect with exponential backoff **and jitter** (500 robots reconnecting in lockstep is a self-inflicted DDoS) | `Ingestor.run` on the backend; `robot_publisher.py::_connect_with_backoff` on the publisher |
 | Backend restarts | `clean_session=False` queues QoS-1 messages; retained telemetry repopulates the fleet instantly | `config.py` |
 | WS client drops | reconnect with `?since=<version>`; the hub replays exactly what was missed, or says it cannot and re-snapshots | `Hub.replay_since`, `ws.py` |
-| WS client too slow | drop its backlog, flag for resync — one laptop on bad wifi must never stall ingest | `Hub.publish`, `ws._resync` |
+| WS client too slow | drop its backlog, flag for resync (one laptop on bad wifi must never stall ingest) | `Hub.publish`, `ws._resync` |
 | Robot restarts | new `session` id resets the sequence cursor | `IngestGuard.judge` |
-| Stale will arrives after reconnect | ignored if its session doesn't match — a dead process must not kill its own replacement | `FleetState.apply_link` |
+| Stale will arrives after reconnect | ignored if its session doesn't match (a dead process must not kill its own replacement) | `FleetState.apply_link` |
 
 Set `CHAOS_DISCONNECT_PROB=0.01` to have publishers randomly yank their sockets and
 watch recovery happen.
@@ -182,13 +182,13 @@ watch recovery happen.
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /health` | liveness + **broker connectivity** — a backend that is up but deaf reports `degraded`, because a bare 200 there is a lie an orchestrator acts on |
+| `GET /health` | liveness + **broker connectivity**: a backend that is up but deaf reports `degraded`, because a bare 200 there is a lie an orchestrator acts on |
 | `GET /fleet` | whole fleet at one `version`, plus a rollup |
 | `GET /robots?needs_attention=&status=&link=` | filtered list |
 | `GET /robots/{id}` | one robot |
 | `GET /robots/history/{id}?start=&end=&limit=` | stretch goal; range is on `reported_ts` (the robot's wall clock), since its `t` field restarts each replay cycle |
 | `GET /metrics` | ingest counters: accepted, duplicates, gaps, estimated loss, reconnects |
-| `WS /ws?since=<version>` | `snapshot` → `update`… with a 10s `ping` heartbeat |
+| `WS /ws?since=<version>` | `snapshot` -> `update`… with a 10s `ping` heartbeat |
 
 Interactive docs at `localhost:8000/docs`.
 
@@ -198,9 +198,9 @@ SQLite, because this is a single node writing ~1.6 rows/second for eight robots:
 operator, no extra container, and the whole store is one file you can open with
 `sqlite3`. Writes are batched off the ingest path (`history.py`) so disk I/O never
 sits between a robot and the operator's screen. At 500 robots at 1Hz it stops being
-the right answer — see SYSTEM_DESIGN.md.
+the right answer; see SYSTEM_DESIGN.md.
 
-Each row stores two clocks — `reported_ts` (robot's wall clock at emit) and
+Each row stores two clocks: `reported_ts` (robot's wall clock at emit) and
 `received_ts` (server clock at ingest). Their difference is arrival lag, which is how
 you watch a link degrade before it fails. Queries range and order on `reported_ts`,
 because an analyst wants the robot's timeline, not ours.
@@ -222,8 +222,8 @@ Everything is env-driven (`config.py`, `.env.example`); defaults work with no se
 |---|---|---|
 | `SPEED_FACTOR` | `5` | replay speed; `1` is real time |
 | `CHAOS_DISCONNECT_PROB` | `0` | per-sample chance a publisher drops its socket |
-| `STALE_AFTER_SECONDS` | `12` | ~2 missed ticks → `stale` |
-| `LOST_AFTER_SECONDS` | `30` | ~6 missed ticks → `lost` |
+| `STALE_AFTER_SECONDS` | `12` | ~2 missed ticks -> `stale` |
+| `LOST_AFTER_SECONDS` | `30` | ~6 missed ticks -> `lost` |
 | `LOW_BATTERY_PCT` | `20` | attention threshold (ignored while charging) |
 | `HUB_REPLAY_BUFFER` | `500` | how far back a WS client can resume |
 | `API_PORT` | `8000` | host port for the REST/WS API |
@@ -272,24 +272,24 @@ The brief asks for this, and asks for honesty rather than a small number. AI ass
 (Claude) was used substantially, across two kinds of work: writing the thing, and then
 trying to break it.
 
-**Delegated — writing.** Initial scaffolding of all modules, both Dockerfiles and the
+**Delegated: writing.** Initial scaffolding of all modules, both Dockerfiles and the
 compose file; first drafts of the test suite; first drafts of this README, `ANSWERS.md`
 and `SYSTEM_DESIGN.md`.
 
-**Mine — the decisions.** The analysis of `events.jsonl` that produced the findings
+**Mine: the decisions.** The analysis of `events.jsonl` that produced the findings
 above, and the decision that follows from it to model `status` and `link` as separate
 fields; the choice of MQTT and the reasoning about a cellular/NAT deployment topology;
 the `snapshot_and_register` consistency design; the watchdog thresholds; the decision to
 write history *before* the ingest guard so the record keeps late readings that live
 state rejects.
 
-**Delegated — verification, and this is where it earned its keep.** A later session
+**Delegated: verification, and this is where it earned its keep.** A later session
 brought the whole system up under Docker and attacked it. That was worth more than the
 drafting, because it found a real bug:
 
 * `FleetState.sweep_liveness` chose a robot's link state from message age alone. A robot
   already `lost` via the broker's Last Will would be **downgraded to `stale`** once its
-  age fell in the stale band — so a dead robot appeared to recover on the operator's
+  age fell in the stale band, so a dead robot appeared to recover on the operator's
   board. Fixed by ordering link severity so the watchdog may only ever escalate; only
   telemetry clears a bad link. `test_watchdog_never_downgrades_an_lwt_lost_robot_to_stale`
   fails without the fix.
@@ -303,21 +303,21 @@ a real broker.
 
 **What is actually verified, and how.** Not "it compiles":
 
-* `pytest` — 29 tests green, on Python 3.11 and on 3.12, the version the containers ship.
-* `docker compose up --build` — from a clean tree containing only git-tracked files,
+* `pytest`: 29 tests green, on Python 3.11 and on 3.12, the version the containers ship.
+* `docker compose up --build`: from a clean tree containing only git-tracked files,
   `--no-cache`, stock builder. Broker healthy, 8 distinct OS pids, 8 robots live.
-* Real MQTT through Mosquitto — 1,534 messages ingested with 0 malformed, 0 out-of-order,
+* Real MQTT through Mosquitto: 1,534 messages ingested with 0 malformed, 0 out-of-order,
   0 estimated lost, across a replay-cycle rollover where `t` restarts and `seq` does not.
-* Consistency — three concurrent WebSocket clients reconstructed the fleet with zero
+* Consistency: three concurrent WebSocket clients reconstructed the fleet with zero
   version gaps and landed on the same version; at a quiescent version, a WS snapshot
   matched the REST body across all 144 fields of all 8 robots.
-* Reconnect — a client resuming with `?since=N` gets version `N+1` contiguously; one
+* Reconnect: a client resuming with `?since=N` gets version `N+1` contiguously; one
   resuming from outside the replay buffer is told to `resync` and handed a fresh
   snapshot, never left to guess.
-* Broker outage — `docker compose stop broker`: health degrades, all 8 robots go `lost`,
-  the API stays up. On restart everything recovers in ~15s with no manual step, and the
-  8 retained messages Mosquitto redelivers are all caught as duplicates rather than
-  double-counted.
+* Broker outage: stopping the broker degrades health, drops all 8 robots to `lost`,
+  and leaves the API up. On restart everything recovers in ~15s with no manual step,
+  and the 8 retained messages Mosquitto redelivers are all caught as duplicates
+  rather than double-counted.
 * The publisher was run as a real process and diffed against `events.jsonl`: cycle 0
   reproduces all 181 of r3's samples exactly (the file holds 1,448 events, 181 per robot).
 
@@ -338,7 +338,7 @@ The brief says an honest, reasoned gap beats a quiet corner-cut, so:
   clustered behind a load balancer would fix it; overkill at this scale and it would
   have eaten the timebox.
 * **A downlink command channel.** Robots only talk upward here. Commands
-  (`fleet/robots/{id}/cmd`) would need request/response correlation and idempotency —
+  (`fleet/robots/{id}/cmd`) would need request/response correlation and idempotency:
   a design conversation, not an afternoon.
 * **Horizontal scaling of the backend.** State is in-process, so today it is one
   instance. See SYSTEM_DESIGN.md Q2 for exactly where that breaks and what replaces it.
@@ -347,4 +347,3 @@ The brief says an honest, reasoned gap beats a quiet corner-cut, so:
 * **Schema versioning.** The payload has no `v` field. Adding one costs nothing now
   and a lot later; I would add it before a second consumer exists.
 * **The frontend.** Assignment 1, not this one.
-
