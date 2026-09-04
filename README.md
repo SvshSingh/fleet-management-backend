@@ -4,6 +4,10 @@ Assignment 2 (Backend). Eight simulated robots publish telemetry over MQTT; a Fa
 service ingests it, holds one authoritative fleet state, and serves that state over
 both a WebSocket stream and a REST endpoint that are guaranteed to agree.
 
+This file covers the architecture and the design decisions. The three written
+questions the challenge asks for are answered in `ANSWERS.md`; the five system-design
+questions are in `SYSTEM_DESIGN.md`.
+
 ```
  robot_sim container              broker            backend container
  ┌──────────────────────┐      ┌──────────┐      ┌───────────────────────────┐
@@ -57,6 +61,15 @@ pytest -v
 No broker and no Docker required: tests drive `Ingestor.handle_raw` directly, which is
 the same function the MQTT loop calls. A test suite you can only run with
 `docker compose up` is a test suite nobody runs.
+
+The trickiest part to get right was the consistency guarantee, and separately the
+ordering between the watchdog and the broker's Last Will. Those live in
+`backend/tests/test_consistency.py` (`test_snapshot_and_subscription_are_atomic`,
+`test_ws_replay_reconstructs_exactly_the_rest_body`) and
+`backend/tests/test_watchdog_and_api.py`
+(`test_watchdog_never_downgrades_an_lwt_lost_robot_to_stale`), the last of which is a
+regression test for the one real bug found while verifying this submission; see the
+AI delegation notes below for how.
 
 ---
 
@@ -323,6 +336,4 @@ a real broker.
 
 I can explain any line in this repo, including the two fixes above and why the bug was
 invisible until the system was actually running.
-
----
 
