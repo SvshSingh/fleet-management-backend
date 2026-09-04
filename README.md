@@ -348,13 +348,3 @@ The brief says an honest, reasoned gap beats a quiet corner-cut, so:
   and a lot later; I would add it before a second consumer exists.
 * **The frontend.** Assignment 1, not this one.
 
-## What I would build next
-
-1. **A `v` field on the wire and a rejection path for unknown versions** — cheapest
-   thing here with the highest future value.
-2. **Redis-backed state and a Postgres/Timescale history**, so the backend becomes
-   stateless and horizontally scalable (SYSTEM_DESIGN.md Q2).
-3. **Per-robot alert rules with hysteresis** — `needs_attention` currently flips
-   instantly, which will flap on a robot oscillating around 20% battery.
-4. **Delta encoding on the wire** — a stationary robot re-sends its position every 5
-   seconds today (SYSTEM_DESIGN.md Q3).
