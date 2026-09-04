@@ -326,24 +326,3 @@ invisible until the system was actually running.
 
 ---
 
-## What I deliberately left out
-
-The brief says an honest, reasoned gap beats a quiet corner-cut, so:
-
-* **Broker auth and TLS.** `allow_anonymous true` on a closed compose network with no
-  internet exposure. In production: per-robot X.509 client certs (the robots already
-  ship with a secure element), topic ACLs so a robot can only write its own topic, and
-  mTLS. About a day, and it needs a CA story more than it needs code.
-* **Multi-broker HA.** One Mosquitto is a single point of failure. EMQX or NATS
-  clustered behind a load balancer would fix it; overkill at this scale and it would
-  have eaten the timebox.
-* **A downlink command channel.** Robots only talk upward here. Commands
-  (`fleet/robots/{id}/cmd`) would need request/response correlation and idempotency:
-  a design conversation, not an afternoon.
-* **Horizontal scaling of the backend.** State is in-process, so today it is one
-  instance. See SYSTEM_DESIGN.md Q2 for exactly where that breaks and what replaces it.
-* **Prometheus/OTel.** `/metrics` returns JSON, not Prometheus text format. Ten
-  minutes to change, but the collector is the real work.
-* **Schema versioning.** The payload has no `v` field. Adding one costs nothing now
-  and a lot later; I would add it before a second consumer exists.
-* **The frontend.** Assignment 1, not this one.
