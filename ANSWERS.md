@@ -122,7 +122,7 @@ straight out of the consistency guarantee, the tests and these documents.
   nothing exposed to the internet. In production this is per-robot X.509 client certs,
   topic ACLs so a robot can only write to its own topic, and mTLS. I left it out
   because it needs a certificate-issuance story more than it needs code, and a
-  half-done auth layer is worse than an obviously absent one.
+  half-done auth layer can be worse than an obviously absent one.
 * **Multi-broker HA.** One Mosquitto is a single point of failure. EMQX or NATS
   clustered behind a load balancer fixes it, and is overkill for eight robots.
 * **Horizontal scaling of the backend.** State is in-process, so this runs as one
@@ -130,8 +130,7 @@ straight out of the consistency guarantee, the tests and these documents.
 * **A downlink command channel.** Robots only talk upward. Commands need
   request/response correlation and idempotency: a design conversation, not an
   afternoon, and nothing in the brief asked for it.
-* **Schema versioning.** No `v` field on the payload. This is the omission I am least
-  comfortable with; see below.
+* **Schema versioning.** No `v` field on the payload.
 * **Prometheus/OTel format**, and **hysteresis on `needs_attention`** (it will flap
   for a robot oscillating around 20% battery).
 
@@ -154,4 +153,4 @@ straight out of the consistency guarantee, the tests and these documents.
 
 **On the timebox:** I spent it on the consistency guarantee, the failure handling, and
 the tests, rather than on breadth. If something here looks thin, it is more likely a
-choice than an oversight; ask me and I will tell you which.
+choice than an oversight.
