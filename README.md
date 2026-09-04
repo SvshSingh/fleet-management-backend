@@ -337,3 +337,26 @@ a real broker.
 I can explain any line in this repo, including the two fixes above and why the bug was
 invisible until the system was actually running.
 
+---
+
+## What I would do next
+
+In priority order, the three things worth doing before this went anywhere near real
+robots:
+
+1. **A version field on the wire.** There is nothing today that rejects a payload
+   from a publisher running a different schema than the backend expects; it would
+   just fail pydantic validation and get silently counted as `malformed`. A `v` field
+   checked in `IngestGuard.judge` turns that into an explicit, loud rejection instead.
+2. **State out of the process.** `FleetState` lives in memory, so a backend restart
+   both loses the version counter's meaning and needs a warm-up window before it is
+   authoritative again. Moving it to Redis, with history in Postgres or Timescale
+   instead of the local SQLite file, is what makes the backend stateless enough to
+   run more than one instance and to restart without a gap.
+3. **Hysteresis on `needs_attention`.** `derive_attention()` in `models.py` flips the
+   instant a robot's battery crosses 20%, so a robot oscillating right at that line
+   would page an operator repeatedly for the same underlying event.
+
+The full list, including what I left out entirely and why, is in ANSWERS.md Q3; the
+scaling and bandwidth reasoning behind items 1 and 2 is in SYSTEM_DESIGN.md Q2 and Q3.
+
